@@ -1,13 +1,19 @@
 use clap::parser::ValueSource;
 use core::num;
-use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::iter::Iterator;
 use std::os::unix::process::ExitStatusExt;
 use std::time;
 use std::{collections::HashSet, fs::File, future::IntoFuture, io::Read};
 
 use clap::{arg, command, Parser};
+use itertools::Itertools;
+use rayon::prelude::*;
+
+// Time to beat:
+// Result B: 10834440 in 2192.901100744s (brute force serial)
+// Result B: 10834440 in 880.852927328s (brute force parallel with rayon)
 
 #[derive(Parser, Debug)]
 #[command()]
@@ -50,9 +56,9 @@ impl MapRange {
         }
     }
 
-    // fn source_range(&self) -> std::ops::Range {
-    //     self.source_start..(self.source_start + self.len)
-    // }
+    fn source_range(&self) -> std::ops::Range<i64> {
+        self.source_start..(self.source_start + self.len)
+    }
 
     // fn source_end(&self) -> i64 {
     //     self.source_start + self.len
@@ -61,14 +67,17 @@ impl MapRange {
     // fn source_contains(&self, val: i64) -> bool {
     //     return val >= self.source_start && val < self.source_end()
 
-    // fn min_overlap(&self, start: i64, len: i64) -> Option<i64> {
-    //     let my_range = self.source_start..(self.source_end());
-    //     let end = start + len;
-    //     let comp_range = start..end;
-    //     if self.source_contains(start) {
-    //         // start is within the range
-    //         return Some(self.dest_start);
-    //     } else if self.source_start > start && self.source_end() < end
+    fn min_overlap(&self, start: i64, len: i64) -> Option<i64> {
+        let my_range = self.source_range();
+        let end = start + len;
+        if my_range.contains(&start) {
+            return Some(start);
+        } else if my_range.contains(&end) {
+            return Some(my_range.start);
+        } else {
+            return None;
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -216,21 +225,25 @@ fn process_b(input: &str) -> i64 {
     }
 
     // let mut results = Vec::new();
-    let mut min_result = std::i64::MAX;
-    let mut count: i64 = 0;
-    for pair in seeds.chunks_exact(2) {
-        let range = pair[0]..(pair[0] + pair[1]);
-        dbg!(&range);
-        for seed in range {
-            count += 1;
-            let map_iter = maps.iter();
-            let loc = map_iter.fold(seed, |acc, m| m.get(acc));
-            if loc < min_result {
-                min_result = loc
+    // let mut min_result = std::i64::MAX;
+    // for pair in seeds.par_chunks_exact(2) {
+    let min_result = seeds
+        .par_chunks_exact(2)
+        .map(|pair| {
+            let mut min_result = i64::MAX;
+            let range = pair[0]..(pair[0] + pair[1]);
+            dbg!(&range);
+            for seed in range {
+                let map_iter = maps.iter();
+                let loc = map_iter.fold(seed, |acc, m| m.get(acc));
+                if loc < min_result {
+                    min_result = loc
+                }
             }
-        }
-        dbg!(min_result);
-    }
+            dbg!(min_result);
+            min_result
+        })
+        .reduce(|| i64::MAX, |a, b| a.min(b));
     // let min_loc = results.iter().reduce(|acc, n| acc.min(n)).unwrap();
     min_result
 }
@@ -282,9 +295,41 @@ mod tests {
 
     #[test]
     fn test_b() {
-        let input = "0";
+        let input = "seeds: 79 14 55 13
 
-        let expected_output = 0;
+        seed-to-soil map:
+        50 98 2
+        52 50 48
+        
+        soil-to-fertilizer map:
+        0 15 37
+        37 52 2
+        39 0 15
+        
+        fertilizer-to-water map:
+        49 53 8
+        0 11 42
+        42 0 7
+        57 7 4
+        
+        water-to-light map:
+        88 18 7
+        18 25 70
+        
+        light-to-temperature map:
+        45 77 23
+        81 45 19
+        68 64 13
+        
+        temperature-to-humidity map:
+        0 69 1
+        1 0 69
+        
+        humidity-to-location map:
+        60 56 37
+        56 93 4";
+
+        let expected_output = 46;
         assert_eq!(process_b(input), expected_output);
     }
 }
