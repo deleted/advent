@@ -1,11 +1,6 @@
-use clap::parser::ValueSource;
-use core::num;
-use std::collections::BTreeMap;
-use std::error::Error;
 use std::iter::Iterator;
-use std::os::unix::process::ExitStatusExt;
 use std::time;
-use std::{collections::HashSet, fs::File, future::IntoFuture, io::Read};
+use std::{fs::File, io::Read};
 
 use clap::{arg, command, Parser};
 use itertools::Itertools;
@@ -59,13 +54,6 @@ impl MapRange {
     fn source_range(&self) -> std::ops::Range<i64> {
         self.source_start..(self.source_start + self.len)
     }
-
-    // fn source_end(&self) -> i64 {
-    //     self.source_start + self.len
-    // }
-
-    // fn source_contains(&self, val: i64) -> bool {
-    //     return val >= self.source_start && val < self.source_end()
 
     fn min_overlap(&self, start: i64, len: i64) -> Option<i64> {
         let my_range = self.source_range();
